@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NHS ClearCare patient discharge and medication view.">
+  <title>NHS App | ClearCare</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            nhs: { blue: "#005EB8", dark: "#003087", pale: "#E8EDFC", green: "#007F3B", red: "#D5281B", ink: "#212B32", grey: "#425563" }
+          },
+          boxShadow: { card: "0 2px 8px rgba(0, 48, 135, .12)" }
+        }
+      }
+    };
+  </script>
+  <style>
+    :root { font-family: Arial, Helvetica, sans-serif; color: #212b32; }
+    body { background: #f0f4f5; }
+    *:focus-visible { outline: 4px solid #ffeb3b; outline-offset: 2px; }
+    textarea { min-height: 260px; resize: vertical; }
+    .spinner { width: 1.25rem; height: 1.25rem; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-nhs-ink">
+  <a class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-white focus:px-4 focus:py-3 focus:text-nhs-dark" href="#main-content">Skip to main content</a>
+
+  <header class="bg-nhs-blue text-white">
+    <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-11 w-[4.5rem] items-center justify-center bg-white text-xl font-black tracking-tight text-nhs-blue" aria-label="NHS">NHS</div>
+        <h1 class="text-lg font-bold sm:text-xl">NHS App <span class="font-normal text-blue-100">|</span> ClearCare</h1>
+      </div>
+      <div class="flex items-center gap-3" aria-label="Patient account controls">
+        <button type="button" class="relative rounded-full p-2 hover:bg-nhs-dark" aria-label="Notifications">
+          <span aria-hidden="true" class="text-2xl">♧</span>
+          <span class="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-nhs-red ring-2 ring-nhs-blue"></span>
+        </button>
+        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-bold text-nhs-blue" aria-label="Patient profile">JD</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="push-notification" class="hidden bg-nhs-green px-4 py-3 text-center text-sm font-bold text-white" role="status" aria-live="polite">
+    <span aria-hidden="true">✓</span> New Discharge Notes &amp; Prescriptions Available
+  </div>
+
+  <main id="main-content" class="mx-auto max-w-3xl px-4 py-6 sm:py-8">
+    <section class="mb-6">
+      <p class="mb-1 text-sm font-bold uppercase tracking-widest text-nhs-blue">Good afternoon, Jordan</p>
+      <h2 class="text-3xl font-bold text-nhs-dark">Your ClearCare</h2>
+      <p class="mt-2 text-base leading-relaxed text-nhs-grey">Your discharge information has been checked and translated into clear, helpful language.</p>
+    </section>
+
+    <details class="mb-6 overflow-hidden rounded-lg border border-slate-300 bg-white shadow-card">
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-bold text-nhs-dark">
+        <span><span class="mr-2 text-nhs-blue" aria-hidden="true">⚙</span> Developer/Doctor View (Input)</span>
+        <span class="text-2xl font-normal text-nhs-blue" aria-hidden="true">+</span>
+      </summary>
+      <div class="border-t border-slate-200 px-5 pb-5 pt-4">
+        <p class="mb-3 text-sm text-nhs-grey">Secure test input for the two-agent validation pipeline.</p>
+        <label for="clinical-notes" class="mb-2 block font-bold">Doctor's Clinical Notes</label>
+        <textarea id="clinical-notes" class="w-full rounded border-2 border-slate-400 p-3 text-sm leading-relaxed shadow-sm focus:border-nhs-blue">Patient admitted with acute STEMI (inferior myocardial infarction), successfully managed with PCI and drug-eluting stent to RCA. Commence aspirin 75 mg OD and ticagrelor 90 mg BID for 12 months. Start atorvastatin 80 mg nocte. GTN spray PRN for breakthrough angina. Avoid NSAIDs and sildenafil; contraindicated due to increased bleeding risk and severe hypotension respectively. Review in cardiology clinic in 6 weeks. Return immediately if chest pain persists despite GTN, dyspnoea, syncope or melaena.</textarea>
+        <p class="mt-2 text-xs text-nhs-grey">Demo data only. Do not enter names, NHS numbers or other identifying information.</p>
+        <button id="push-button" type="button" class="mt-4 flex w-full items-center justify-center gap-3 rounded bg-nhs-blue px-5 py-3 font-bold text-white hover:bg-nhs-dark disabled:cursor-not-allowed disabled:opacity-70">
+          <span id="push-spinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="push-label">Push to NHS App</span>
+        </button>
+        <p id="push-status" class="mt-3 min-h-5 text-center text-sm font-semibold text-nhs-grey" role="status" aria-live="polite"></p>
+      </div>
+    </details>
+
+    <section id="patient-view" aria-labelledby="patient-view-heading">
+      <div class="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-widest text-nhs-green">Patient View</p>
+          <h2 id="patient-view-heading" class="text-2xl font-bold text-nhs-dark">Discharge summary</h2>
+        </div>
+        <span class="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-nhs-green">Verified today</span>
+      </div>
+
+      <article class="mb-5 rounded-lg border border-blue-200 bg-white p-5 shadow-card sm:p-6" aria-labelledby="translator-heading">
+        <div class="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-widest text-nhs-blue">Two-Agent Output · Agent 1</p>
+            <h3 id="translator-heading" class="mt-1 text-xl font-bold text-nhs-dark">The Translator</h3>
+          </div>
+          <span class="rounded bg-nhs-pale px-2 py-1 text-xs font-bold text-nhs-blue">Plain English</span>
+        </div>
+        <div class="space-y-3 leading-relaxed text-slate-800">
+          <p>You were treated for a heart attack. Doctors opened a blocked heart blood vessel using a small tube and placed a stent to keep it open.</p>
+          <p>Take <strong>aspirin 75 mg once a day</strong> and <strong>ticagrelor 90 mg twice a day</strong> for 12 months. Take <strong>atorvastatin 80 mg at night</strong>. You can use your GTN spray for sudden chest pain.</p>
+          <p>Do not take anti-inflammatory painkillers such as ibuprofen, or sildenafil. These medicines could cause serious bleeding or a dangerous drop in blood pressure.</p>
+          <p>Your heart clinic appointment is in 6 weeks. Call 999 or go to A&amp;E if chest pain does not improve after GTN, or if you have trouble breathing, faint, or notice black stools.</p>
+        </div>
+        <p class="mt-5 rounded border-l-4 border-nhs-blue bg-blue-50 p-3 text-sm text-nhs-dark"><strong>Important:</strong> This summary supports your understanding. It does not replace advice from your healthcare team.</p>
+      </article>
+
+      <details class="mb-7 overflow-hidden rounded-lg border border-green-200 bg-white shadow-card">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+          <span class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-lg text-nhs-green" aria-hidden="true">✓</span>
+            <span><strong class="block text-nhs-dark">Clinical Auditor</strong><span class="text-xs text-nhs-green">Security badge · 8/8 checks passed</span></span>
+          </span>
+          <span class="text-xl text-nhs-green" aria-hidden="true">⌄</span>
+        </summary>
+        <ul class="space-y-3 border-t border-green-100 px-5 py-4 text-sm text-slate-800" aria-label="AI safety validation checklist">
+          <li>✓ <strong>Dosage accuracy verified</strong></li>
+          <li>✓ <strong>Frequency and duration preserved</strong></li>
+          <li>✓ <strong>Contraindications and warnings retained</strong></li>
+          <li>✓ <strong>Medical entity extraction matched</strong></li>
+          <li>✓ <strong>No generative hallucinations detected</strong></li>
+          <li>✓ <strong>Emergency escalation advice preserved</strong></li>
+          <li>✓ <strong>Protected characteristics bias check passed</strong></li>
+          <li>✓ <strong>Reading level meets patient target</strong></li>
+        </ul>
+      </details>
+
+      <section aria-labelledby="medications-heading">
+        <div class="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p class="text-sm font-bold uppercase tracking-widest text-nhs-blue">Your medicines</p>
+            <h2 id="medications-heading" class="text-2xl font-bold text-nhs-dark">My Active Prescriptions</h2>
+          </div>
+          <span class="hidden text-sm text-nhs-grey sm:block">3 medicines</span>
+        </div>
+
+        <div class="space-y-4">
+          <article class="medication-card rounded-lg border border-slate-200 bg-white p-5 shadow-card transition" data-medication="Aspirin">
+            <div class="flex items-start justify-between gap-4">
+              <div><h3 class="text-lg font-bold text-nhs-dark">Aspirin 75 mg</h3><p class="text-sm text-nhs-grey">Once daily · For heart protection</p></div>
+              <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-nhs-green">Active</span>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <p class="text-sm"><span class="font-bold text-nhs-dark">Next dose</span><br><span class="text-xl font-bold text-nhs-blue">08:00 AM</span></p>
+              <label class="flex cursor-pointer items-center gap-2 rounded border border-nhs-blue px-3 py-2 text-sm font-bold text-nhs-blue hover:bg-blue-50"><input class="dose-checkbox h-5 w-5 accent-nhs-blue" type="checkbox"> Mark as Taken</label>
+            </div>
+            <p class="mt-3 text-xs text-nhs-grey">Prescription expires: <strong>31 December 2026</strong></p>
+          </article>
+
+          <article class="medication-card rounded-lg border border-red-300 bg-white p-5 shadow-card" data-medication="Ticagrelor">
+            <div class="flex items-start justify-between gap-4">
+              <div><h3 class="text-lg font-bold text-nhs-dark">Ticagrelor 90 mg</h3><p class="text-sm text-nhs-grey">Twice daily · For blood clot prevention</p></div>
+              <span class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-nhs-red">Action needed</span>
+            </div>
+            <div class="mt-4 rounded border-l-4 border-nhs-red bg-red-50 p-3 text-sm font-bold leading-relaxed text-nhs-red">⚠️ EXPIRED: Do not consume. Please return to your local pharmacy for safe disposal.</div>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <p class="text-sm"><span class="font-bold text-nhs-dark">Next dose</span><br><span class="text-xl font-bold text-nhs-blue">08:00 PM</span></p>
+              <label class="flex cursor-pointer items-center gap-2 rounded border border-nhs-blue px-3 py-2 text-sm font-bold text-nhs-blue hover:bg-blue-50"><input class="dose-checkbox h-5 w-5 accent-nhs-blue" type="checkbox"> Mark as Taken</label>
+            </div>
+            <p class="mt-3 text-xs text-nhs-red">Prescription expired: <strong>30 September 2026</strong></p>
+          </article>
+
+          <article class="medication-card rounded-lg border border-slate-200 bg-white p-5 shadow-card" data-medication="Atorvastatin">
+            <div class="flex items-start justify-between gap-4">
+              <div><h3 class="text-lg font-bold text-nhs-dark">Atorvastatin 80 mg</h3><p class="text-sm text-nhs-grey">Once nightly · For cholesterol control</p></div>
+              <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-nhs-green">Active</span>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <p class="text-sm"><span class="font-bold text-nhs-dark">Next dose</span><br><span class="text-xl font-bold text-nhs-blue">10:00 PM</span></p>
+              <label class="flex cursor-pointer items-center gap-2 rounded border border-nhs-blue px-3 py-2 text-sm font-bold text-nhs-blue hover:bg-blue-50"><input class="dose-checkbox h-5 w-5 accent-nhs-blue" type="checkbox"> Mark as Taken</label>
+            </div>
+            <p class="mt-3 text-xs text-nhs-grey">Prescription expires: <strong>31 December 2026</strong></p>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <footer class="mt-8 border-t border-slate-300 pt-5 text-sm text-nhs-grey"><strong>Demo only.</strong> NHS ClearCare is a hackathon prototype and must not be used for real clinical decisions.</footer>
+  </main>
+
+  <script>
+    const pushButton = document.getElementById("push-button");
+    const pushLabel = document.getElementById("push-label");
+    const pushSpinner = document.getElementById("push-spinner");
+    const pushStatus = document.getElementById("push-status");
+    const pushNotification = document.getElementById("push-notification");
+
+    pushButton.addEventListener("click", () => {
+      pushButton.disabled = true;
+      pushLabel.textContent = "Pushing securely to NHS App…";
+      pushSpinner.classList.remove("hidden");
+      pushStatus.textContent = "Secure API push in progress. Please wait.";
+      pushNotification.classList.add("hidden");
+      window.setTimeout(() => {
+        pushButton.disabled = false;
+        pushLabel.textContent = "Push to NHS App again";
+        pushSpinner.classList.add("hidden");
+        pushStatus.textContent = "Push complete. Patient view updated.";
+        pushNotification.classList.remove("hidden");
+        document.getElementById("patient-view").scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 2000);
+    });
+
+    document.querySelectorAll(".dose-checkbox").forEach((checkbox) => {
+      checkbox.addEventListener("change", (event) => {
+        const card = event.target.closest(".medication-card");
+        const label = event.target.closest("label");
+        card.classList.toggle("opacity-60", event.target.checked);
+        label.lastChild.textContent = event.target.checked ? " Dose marked as taken" : " Mark as Taken";
+        label.classList.toggle("border-nhs-green", event.target.checked);
+        label.classList.toggle("text-nhs-green", event.target.checked);
+        label.setAttribute("aria-label", event.target.checked ? "Dose marked as taken" : "Mark dose as taken");
+      });
+    });
+  </script>
+</body>
+</html>
