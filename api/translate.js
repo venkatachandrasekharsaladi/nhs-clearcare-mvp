@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -9,75 +9,65 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Please provide a clinical discharge note to translate.' });
   }
 
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
+  // Accepts either GEMINI_API_KEY or GOOGLE_API_KEY in Vercel
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 
-  if (!geminiKey && !openaiKey) {
+  if (!apiKey) {
     return res.status(500).json({
-      error: 'Server API key not configured. Add GEMINI_API_KEY or OPENAI_API_KEY in Vercel Environment Variables.'
+      error: 'API key not found on server. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in Vercel Environment Variables and Redeploy.'
     });
   }
 
-  // Helper to call either Gemini or OpenAI and return parsed JSON
-  async function callLLM(systemPrompt, userPrompt) {
-    if (geminiKey) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: 'application/json'
-            }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API Error (${response.status}): ${errText}`);
-      }
-
-      const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      return JSON.parse(rawText.replace(/```json|```/g, '').trim());
-    } else {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  async function callGeminiModel(modelName, systemPrompt, userPrompt) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openaiKey}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json'
+          }
         })
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`OpenAI API Error (${response.status}): ${errText}`);
       }
+    );
 
-      const data = await response.json();
-      const rawText = data.choices?.[0]?.message?.content || '{}';
-      return JSON.parse(rawText.replace(/```json|```/g, '').trim());
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      const msg = errJson?.error?.message || `Google API HTTP ${response.status}`;
+      const err = new Error(msg);
+      err.status = response.status;
+      throw err;
     }
+
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    return JSON.parse(rawText.replace(/```json|```/g, '').trim());
+  }
+
+  async function callLLM(systemPrompt, userPrompt) {
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+      try {
+        return await callGeminiModel(model, systemPrompt, userPrompt);
+      } catch (err) {
+        lastError = err;
+        // Stop retrying immediately if the API key itself is invalid or blocked
+        if (err.status === 400 || err.status === 403) {
+          throw err;
+        }
+      }
+    }
+    throw lastError;
   }
 
   try {
-    // =========================================================================
     // AGENT 1: CLINICAL TRANSLATOR & MEDICATION EXTRACTOR
-    // =========================================================================
     const agent1System = `You are Agent 1 (NHS ClearCare Patient Translator). Rewrite complex clinical discharge notes into warm, clear, accessible language at an 8th-grade reading level in ${targetLanguage}.
 STRICT SAFETY RULES:
 1. Never invent diagnoses, medications, dosages, or medical advice not present in the source text.
@@ -103,9 +93,7 @@ STRICT SAFETY RULES:
       `Original Clinical Discharge Note:\n"""\n${clinicalNote}\n"""`
     );
 
-    // =========================================================================
     // AGENT 2: CLINICAL SAFETY & HALLUCINATION AUDITOR
-    // =========================================================================
     const agent2System = `You are Agent 2 (NHS ClearCare Clinical Safety Auditor). Independently audit Agent 1's patient translation against the Doctor's Original Clinical Note to detect hallucinations, altered dosages, omitted warnings, or unsafe phrasing.
 Return ONLY valid JSON with this exact schema:
 {
@@ -137,8 +125,7 @@ Return ONLY valid JSON with this exact schema:
   } catch (error) {
     console.error('Two-Agent Pipeline Error:', error);
     return res.status(500).json({
-      error: 'AI pipeline encountered an error. Check your API key quota or try again.',
-      details: error.message
+      error: `AI Pipeline Error: ${error.message}`
     });
   }
-}
+};
