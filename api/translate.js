@@ -9,14 +9,15 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Please provide a clinical discharge note to translate.' });
   }
 
-  // Accepts either GEMINI_API_KEY or GOOGLE_API_KEY in Vercel
   const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 
   if (!apiKey) {
     return res.status(500).json({
-      error: 'API key not found on server. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in Vercel Environment Variables and Redeploy.'
+      error: 'API key not found on server. Set GEMINI_API_KEY or GOOGLE_API_KEY in Vercel and Redeploy.'
     });
   }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function callGeminiModel(modelName, systemPrompt, userPrompt) {
     const response = await fetch(
@@ -38,7 +39,7 @@ module.exports = async function handler(req, res) {
     if (!response.ok) {
       const errJson = await response.json().catch(() => ({}));
       const msg = errJson?.error?.message || `Google API HTTP ${response.status}`;
-      const err = new Error(msg);
+      const err = new Error(`[${modelName}] ${msg}`);
       err.status = response.status;
       throw err;
     }
@@ -49,18 +50,26 @@ module.exports = async function handler(req, res) {
   }
 
   async function callLLM(systemPrompt, userPrompt) {
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+    // Active 2026 production Gemini 3 endpoints ordered for high availability & low latency
+    const modelsToTry = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite'
+    ];
     let lastError = null;
 
-    for (const model of modelsToTry) {
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const model = modelsToTry[i];
       try {
         return await callGeminiModel(model, systemPrompt, userPrompt);
       } catch (err) {
         lastError = err;
-        // Stop retrying immediately if the API key itself is invalid or blocked
         if (err.status === 400 || err.status === 403) {
           throw err;
         }
+        // Brief backoff before failing over on 503 overload or 429 rate limit
+        await sleep(700 * (i + 1));
       }
     }
     throw lastError;
